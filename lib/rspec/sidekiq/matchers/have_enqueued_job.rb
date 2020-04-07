@@ -38,6 +38,12 @@ module RSpec
       class JobMatcher
         attr_reader :jobs
 
+        def self.job_arguments(job)
+          args = job['args']
+          return args[0]['arguments'] if args.is_a?(Array) && args[0].is_a?(Hash) && args[0].has_key?('arguments')
+          args
+        end
+
         def initialize(klass)
           @jobs = unwrap_jobs(klass.jobs)
         end
@@ -54,7 +60,7 @@ module RSpec
         end
 
         def arguments_matches?(job, arguments)
-          arguments_got = job_arguments(job)
+          arguments_got = self.class.job_arguments(job)
           contain_exactly?(arguments, arguments_got)
         end
 
@@ -67,12 +73,6 @@ module RSpec
 
         def find_job(arguments, options)
           jobs.find { |job| matches?(job, arguments, options) }
-        end
-
-        def job_arguments(job)
-          args = job['args']
-          return args[0]['arguments'] if args.is_a?(Array) && args[0].is_a?(Hash) && args[0].has_key?('arguments')
-          args
         end
 
         def unwrap_jobs(jobs)
@@ -96,7 +96,7 @@ module RSpec
 
         def matches?(klass)
           @klass = klass
-          @actual_arguments = unwrapped_job_arguments(klass.jobs)
+          @actual_arguments = klass.jobs.map { |j| JobMatcher.job_arguments(j) }
           @actual_options = unwrapped_job_options(klass.jobs)
           JobMatcher.new(klass).present?(expected_arguments, expected_options)
         end
@@ -139,29 +139,6 @@ module RSpec
           jobs.flatten.map do |job|
             { 'at' => job['at'] }
           end
-        end
-
-        def unwrapped_job_arguments(jobs)
-          if jobs.is_a? Hash
-            jobs.values.flatten.map do |job|
-              map_arguments(job)
-            end
-          else
-            map_arguments(jobs)
-          end.map { |job| job.flatten }
-        end
-
-        def map_arguments(job)
-          args = job_arguments(job) || job
-          if args.respond_to?(:any?) && args.any? { |e| e.is_a? Hash }
-            args.map { |a| map_arguments(a) }
-          else
-            args
-          end
-        end
-
-        def job_arguments(hash)
-          hash['arguments'] || hash['args'] if hash.is_a? Hash
         end
 
         def normalize_arguments(args)

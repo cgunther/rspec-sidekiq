@@ -120,6 +120,30 @@ RSpec.describe RSpec::Sidekiq::Matchers::HaveEnqueuedJob do
         arguments: [[\"string\", 1, true, {\"key\"=>\"value\", \"bar\"=>\"foo\", \"nested\"=>[{\"hash\"=>true}]}]]
       eos
     end
+
+    it 'extracts arguments from ActiveJob wrapped job' do
+      subject = RSpec::Sidekiq::Matchers::HaveEnqueuedJob.new ['someResource']
+      subject.matches? Sidekiq::Worker
+      expect(subject.failure_message).to eq <<-eos.gsub(/^ {6}/, '').strip
+      expected to have an enqueued #{Sidekiq::Worker} job
+        arguments: [\"someResource\"]
+      found
+        arguments: [["string", 1, true, {"key"=>"value", "bar"=>"foo", "nested"=>[{"hash"=>true}]}], ["someResource"], [{"_aj_globalid"=>"#{resource.to_global_id}"}], ["TestActionMailer", "testmail", "deliver_now"], ["TestActionMailer", "testmail", "deliver_now", {"_aj_globalid"=>"#{resource.to_global_id}"}]]
+      eos
+    end
+
+    it 'does not unwrap an inner "args" argument' do
+      active_job.perform_later 'args' => 'foo'
+
+      subject = RSpec::Sidekiq::Matchers::HaveEnqueuedJob.new [{ 'args' => 'foo' }]
+      subject.matches? Sidekiq::Worker
+      expect(subject.failure_message).to eq <<-eos.gsub(/^ {6}/, '').strip
+      expected to have an enqueued #{Sidekiq::Worker} job
+        arguments: [{"args"=>"foo"}]
+      found
+        arguments: [["string", 1, true, {"key"=>"value", "bar"=>"foo", "nested"=>[{"hash"=>true}]}], ["someResource"], [{"_aj_globalid"=>"#{resource.to_global_id}"}], ["TestActionMailer", "testmail", "deliver_now"], ["TestActionMailer", "testmail", "deliver_now", {"_aj_globalid"=>"#{resource.to_global_id}"}], [{"args"=>"foo", "_aj_symbol_keys"=>[]}]]
+      eos
+    end
   end
 
   describe '#failure_message_when_negated' do
